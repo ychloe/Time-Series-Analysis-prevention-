@@ -1,0 +1,211 @@
+data PROJECT3.milk1;
+set PROJECT3.milk;
+if time>62 then delete;
+keep date sales;
+run;
+quit;
+
+Proc sgplot DATA = PROJECT3.MILK;
+ SERIES X =date Y = sales;
+ TITLE 'Oahu milk consumption from Feb.1977 to July.1983';
+run;
+quit;
+
+Proc sgplot DATA = PROJECT3.MILK1;
+ SERIES X =date Y = sales;
+ TITLE 'Oahu milk consumption from Feb.1977 to Mar.1982';
+run;
+quit;
+
+proc arima data=PROJECT3.MILK1 plots;
+identify var=sales scan nlag=60;
+run;
+
+proc univariate data=PROJECT3.MILK1;
+  var sales;
+  histogram / normal (fill mu =est sigma = est);
+qqplot sales/ normal(mu=est sigma=est) square;
+run;
+quit;
+
+title2 'Identify noise model for the values before Mar.1982';
+proc arima data=PROJECT3.MILK1;
+  identify var=sales;
+  estimate p=(1)(12) q=0 printall grid method=ml plot; *(1,0,0)x(1,0,0)_12;
+  *estimate p=(1) q=(0)(12) printall grid method=ml plot;*(1,0,0)x(0,0,1)_12;
+  *estimate p=(0)(12) q=1 printall grid method=ml plot;*(0,0,1)x(1,0,0)_12;
+  *estimate p=0 q=(1)(12) printall grid method=ml plot;*(0,0,1)x(0,0,1)_12;
+   estimate p=(1,2,3)(12) q=0 printall grid method=ml plot;*(3,0,0)x(1,0,0)_12;
+  *estimate p=(1,2,3) q=(0)(12) printall grid method=ml plot;*(3,0,0)x(0,0,1)_12;
+  *estimate p=(0)(12) q=(1,2,3) printall grid method=ml plot;*(0,0,3)x(1,0,0)_12;
+  *estimate p=0 q=(1,2,3)(12) printall grid method=ml plot;*(0,0,3)x(0,0,1)_12;
+  *estimate p=(1)(12) q=(1,2) printall grid method=ml plot;*(1,0,2)x(1,0,0)_12;
+  *estimate p=(1) q=(1,2)(12) printall grid method=ml plot;*(1,0,2)x(0,0,1)_12;
+  estimate p=(1,2)(12) q=1 printall grid method=ml plot;*(2,0,1)x(1,0,0)_12;
+  *estimate p=(1,2) q=(1)(12) printall grid method=ml plot;*(2,0,1)x(0,0,1)_12;
+   *estimate p=(0)(12) q=0 printall grid method=ml plot;*(0,0,0)x(1,0,0)_12;
+  *estimate p=0 q=(0)(12) printall grid method=ml plot;*(0,0,0)x(0,0,1)_12;
+   estimate p=(1,2)(12) q=0 printall grid method=ml plot;*(2,0,0)x(1,0,0)_12;
+  *estimate p=(1,2) q=(0)(12) printall grid method=ml plot;*(2,0,0)x(0,0,1)_12;
+   estimate p=(0)(12) q=(1,2) printall grid method=ml plot;*(0,0,2)x(1,0,0)_12;
+  *estimate p=0 q=(1,2)(12) printall grid method=ml plot;*(0,0,2)x(0,0,1)_12;
+  *estimate p=(1)(12) q=1 printall grid method=ml plot;*(1,0,1)x(1,0,0)_12;
+  *estimate p=(1) q=(1,2)(12) printall grid method=ml plot;*(1,0,1)x(0,0,1)_12;
+run;
+quit;
+
+title2 'best noise model for the values before Mar.1982';
+proc arima data=PROJECT3.MILK1;
+  identify var=sales;
+  estimate p=(0,2)(12) q=1 printall grid method=ml plot;
+   estimate p=(1,2)(12) q=0 printall grid method=ml plot;
+     estimate p=(0)(12) q=(1,2) printall grid method=ml plot;
+run;
+quit;
+
+
+data PROJECT3.Milk2;
+	set PROJECT3.Milk;
+	keep sales;
+*Here I am retaining only the sales column in my Milk data;
+run;
+quit;
+
+data PROJECT3.Milk2;
+	set PROJECT3.Milk2;
+	retain date '01jan77'd;
+	date =intnx('month', date,1); 
+	format date monyy.;
+	P=(date='01apr82'd);
+	I=(date>= '01apr82'd);
+	time=_n_;
+*Run this code and look at the data, then you will know what this did to Milk2 data;
+run;
+quit;
+
+data PROJECT3.MilktoApr83;
+	set PROJECT3.Milk2;
+	if time > 75 then sales='.';
+*You need to create this kind of data where the last three values are identified as missing before fitting the intervention models, only the SAS will give you forecast for the last three values which you would need to compute MAPE;
+run;
+quit;
+
+proc arima data=PROJECT3.MilktoApr83;
+  identify var=sales crosscorr=(I P) nlag=30;
+  estimate p=(0,2)(12) q=1 input=(1$(1)/(1)I P) printall grid method=ml plot;
+  forecast out=PROJECT3.SARIMA id=time alpha=0.05 lead=3;
+run;
+quit;
+proc arima data=PROJECT3.MilktoApr83;
+  identify var=sales crosscorr=(I P) nlag=30;
+  estimate p=(0,2)(12) q=1 input=(1$/(1)P (1)I) printall grid method=ml plot;
+  forecast out=PROJECT3.SARIMA id=time alpha=0.05 lead=3;
+run;
+quit;
+
+proc arima data=PROJECT3.MilktoApr83;
+  identify var=sales crosscorr=(I P) nlag=30;
+  estimate p=(0,2)(12) q=1 input=((2)/(2)I (2)P) printall grid method=ml plot;
+  forecast out=PROJECT3.SARIMA id=time alpha=0.05 lead=3;
+run;
+quit;
+
+proc arima data=PROJECT3.MilktoApr83;
+  identify var=sales crosscorr=(I P) nlag=30;
+  estimate p=(0,2)(12) q=1 input=(1$/(1)P 0$/(1)I) printall grid method=ml plot;
+  forecast out=PROJECT3.SARIMA id=time alpha=0.05 lead=3;
+run;
+quit;
+data PROJECT3.SARIMA;
+ merge PROJECT3.SARIMA PROJECT3.Milk2;
+run;
+quit;
+
+Proc sgplot DATA = PROJECT3.SARIMA;
+where time>75;
+ SERIES X =date Y = sales;
+ SERIES X =date Y = forecast;
+ SERIES X =date Y = L95;
+ SERIES X =date Y = U95;
+ TITLE 'Forecasts for milk consumption from May to July of 1983';
+run;
+quit;
+
+
+title2 "MAPE Computations for SARIMA ((0,2),0,1)x(0,0,1)_12 for Sale with Intercept";
+data forecastbest1;
+ set PROJECT3.SARIMA;
+ where time > 75;
+ keep forecast1 time;
+run;
+quit;
+
+data PartCompbest1;
+ set PROJECT3.Milk2;
+ where time > 75;
+ keep sales time;
+run;
+quit;
+
+
+data MAPEbest1;
+ merge forecastbest1 PartCompbest1;
+ ratio1 = (abs(sales-forecast1))/sales;
+proc print;
+run;
+quit;
+
+proc means data=MAPEbest1 noprint;
+ var ratio1;
+output out=mape1 mean=mape1;
+run;
+
+proc print;
+title2 "MAPE value for SARIMA ((0,2),0,1)x(0,0,1)_12 for Sale with Intercept";
+run;
+quit;
+proc arima data=PROJECT3.MilktoApr83;
+  identify var=sales crosscorr=(I P) nlag=30;
+  estimate p=(0,2)(12) q=1 input=((2)/(2)I (2)P) printall grid method=ml plot;
+  forecast out=PROJECT3.SARIMA id=time alpha=0.05 lead=78;
+run;
+quit;
+
+data PROJECT3.SARIMA;
+ merge PROJECT3.SARIMA PROJECT3.Milk2;
+run;
+quit;
+
+Proc sgplot DATA = PROJECT3.SARIMA;
+ SERIES X =date Y = sales;
+ SERIES X =date Y = forecast;
+ SERIES X =date Y = L95;
+ SERIES X =date Y = U95;
+ TITLE 'Forecasts for milk consumption from 1977 to 1983';
+run;
+quit;
+
+proc arima data=PROJECT3.MilktoApr83;
+  identify var=sales crosscorr=(I P) nlag=30;
+  estimate p=(0,2)(12) q=1 input=((2)/(2)I (2)P) printall grid method=ml plot;
+  forecast out=PROJECT3.SARIMA id=time alpha=0.05 lead=19;
+run;
+quit;
+
+data PROJECT3.SARIMA;
+ merge PROJECT3.SARIMA PROJECT3.Milk2;
+run;
+quit;
+
+Proc sgplot DATA = PROJECT3.SARIMA;
+ where time >59;
+ SERIES X =date Y = sales;
+ SERIES X =date Y = forecast;
+ SERIES X =date Y = L95;
+ SERIES X =date Y = U95;
+ TITLE 'Forecasts for milk consumption from Jan.1982 to July.1983';
+run;
+quit;
+
+
+
