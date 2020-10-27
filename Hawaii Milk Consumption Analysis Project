@@ -206,6 +206,3 @@ Proc sgplot DATA = PROJECT3.SARIMA;
  TITLE 'Forecasts for milk consumption from Jan.1982 to July.1983';
 run;
 quit;
-
-
-
